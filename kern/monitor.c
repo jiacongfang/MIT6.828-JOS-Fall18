@@ -24,6 +24,7 @@ struct Command
 static struct Command commands[] = {
 	{"help", "Display this list of commands", mon_help},
 	{"kerninfo", "Display information about the kernel", mon_kerninfo},
+	{"backtrace", "Back trace the function call frames", mon_backtrace},
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -55,27 +56,42 @@ int mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
-	// 3.
+	// 8.3
 	// int x = 1, y = 3, z = 4;
 	// cprintf("x %d, y %x, z %d\n", x, y, z);
 	// return 0;
 
-	// 4.
+	// 8.4
 	// unsigned int i = 0x00646c72;
 	// cprintf("H%x Wo%s", 57616, &i);
 
-	// 5.
+	// 8.5
 	// cprintf("x=%d y=%d", 3);
 
 	// test the color mode
-	cprintf("This is a test for challenge\n");
-	cprintf("%s", "\033[31;42mHello Red World!\033[0m\n");
-	cprintf("%s", "\033[32;43mHello Green World!\033[0m\n");
-	cprintf("%s", "\033[33;44mHello Yellow World!\033[0m\n");
-	cprintf("%s", "\033[34;45mHello Blue World!\033[0m\n");
-	cprintf("%s", "\033[35;46mHello Magenta World!\033[0m\n");
-	cprintf("%s", "\033[36;47mHello Cyan World!\033[0m\n");
-	// cprintf("%s", "\033[37;aa;41mTest Invalid Code!\033[0m\n");
+	// cprintf("This is a test for challenge\n");
+	// cprintf("%s", "\033[31;42mHello Red World!\033[0m\n");
+	// cprintf("%s", "\033[32;43mHello Green World!\033[0m\n");
+	// cprintf("%s", "\033[33;44mHello Yellow World!\033[0m\n");
+	// cprintf("%s", "\033[34;45mHello Blue World!\033[0m\n");
+	// cprintf("%s", "\033[35;46mHello Magenta World!\033[0m\n");
+	// cprintf("%s", "\033[36;47mHello Cyan World!\033[0m\n");
+	// cprintf("%s", "\033[a;31m Test Invalid Code!\033[0m\n");
+
+	// Exercise 11
+	uint32_t ebp = read_ebp();
+	while (ebp)
+	{
+		cprintf("ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
+				ebp,
+				*((uint32_t *)(ebp + 4)),
+				*((uint32_t *)(ebp + 8)),
+				*((uint32_t *)(ebp + 12)),
+				*((uint32_t *)(ebp + 16)),
+				*((uint32_t *)(ebp + 20)),
+				*((uint32_t *)(ebp + 24)));
+		ebp = *((uint32_t *)(ebp));
+	}
 	return 0;
 }
 
