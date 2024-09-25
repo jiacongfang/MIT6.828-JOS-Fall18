@@ -30,18 +30,4 @@ int vfprintf(int fd, const char *fmt, va_list);
 // lib/readline.c
 char *readline(const char *prompt);
 
-// Color enum
-enum
-{
-    COLOR_BLACK = 0,
-    COLOR_RED,
-    COLOR_GREEN,
-    COLOR_YELLOW,
-    COLOR_BLUE,
-    COLOR_MAGENTA,
-    COLOR_CYAN,
-    COLOR_WHITE,
-    COLOR_NUM,
-};
-
 #endif /* !JOS_INC_STDIO_H */
