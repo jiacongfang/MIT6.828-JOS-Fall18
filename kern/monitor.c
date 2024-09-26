@@ -56,6 +56,7 @@ int mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	/* Here are some test codes for prev exercise.
 	// 8.3
 	// int x = 1, y = 3, z = 4;
 	// cprintf("x %d, y %x, z %d\n", x, y, z);
@@ -77,19 +78,30 @@ int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	// cprintf("%s", "\033[35;46mHello Magenta World!\033[0m\n");
 	// cprintf("%s", "\033[36;47mHello Cyan World!\033[0m\n");
 	// cprintf("%s", "\033[a;31m Test Invalid Code!\033[0m\n");
+	*/
 
 	// Exercise 11
 	uint32_t ebp = read_ebp();
 	while (ebp)
 	{
+		uint32_t eip = *((uint32_t *)(ebp + 4));
 		cprintf("ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
 				ebp,
-				*((uint32_t *)(ebp + 4)),
+				eip,
 				*((uint32_t *)(ebp + 8)),
 				*((uint32_t *)(ebp + 12)),
 				*((uint32_t *)(ebp + 16)),
 				*((uint32_t *)(ebp + 20)),
 				*((uint32_t *)(ebp + 24)));
+		struct Eipdebuginfo info;
+		debuginfo_eip(eip, &info);
+		// Example kern/monitor.c:143: monitor+106
+		cprintf("       %s:%d: %.*s+%d\n",
+				info.eip_file,
+				info.eip_line,
+				info.eip_fn_namelen,
+				info.eip_fn_name,
+				eip - info.eip_fn_addr);
 		ebp = *((uint32_t *)(ebp));
 	}
 	return 0;
