@@ -313,7 +313,7 @@ page_alloc(int alloc_flags)
 	struct PageInfo *returned_page = page_free_list;
 
 	// Out of memoty
-	if (returned_page == NULL)
+	if (!returned_page)
 		return NULL;
 
 	// Update the free list and set returned_page
@@ -342,10 +342,12 @@ void page_free(struct PageInfo *pp)
 	if (pp->pp_link != NULL)
 	{
 		panic("Can't free pages in use, the pp_link is not NULL.");
+		return;
 	}
 	else if (pp->pp_ref != 0)
 	{
 		panic("Can't free pages in use, the pp_ref is not zero.");
+		return;
 	}
 
 	pp->pp_link = page_free_list;
@@ -388,7 +390,37 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+	pde_t *pgdir_entry = pgdir + PDX(va); // Get PDE
+
+	// Check the relevant page table page exist or not
+	// If not, alloc a new table page
+	if (!(*pgdir_entry & PTE_P)) // Get the Present flags
+	{
+		if (create == false)
+		{
+			return NULL;
+		}
+
+		// Clear the page
+		struct PageInfo *new_page = page_alloc(ALLOC_ZERO);
+
+		if (new_page == NULL)
+		{
+			return NULL;
+		}
+		// Increase the new page's ref count
+		new_page->pp_ref += 1;
+
+		// Let pgdir_entry point to the new page
+		// Set all flags as well (Hint 2)
+		*pgdir_entry = page2pa(new_page) | PTE_P | PTE_U | PTE_W;
+	}
+
+	// Pointer use visual address.
+	// Return pointer to the PTE for 'va'.
+	// Manual type conversion required !!!
+	pte_t *pte = (pte_t *)KADDR(PTE_ADDR(*pgdir_entry)) + PTX(va);
+	return pte;
 }
 
 //
@@ -397,7 +429,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 // va and pa are both page-aligned.
 // Use permission bits perm|PTE_P for the entries.
 //
-// This function is only intended to set up the ``static'' mappings
+// This function is only intended to set up the ``static`` mappings
 // above UTOP. As such, it should *not* change the pp_ref field on the
 // mapped pages.
 //
@@ -406,6 +438,23 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+
+	// Check va & pa
+	if ((va & (PGSIZE - 1)) || (pa & (PGSIZE - 1)))
+		panic("boot_map_region: va / pa are not page-aligned.");
+
+	size_t page_num = ROUNDUP(size, PGSIZE) / PGSIZE;
+	pte_t *pte;
+
+	for (size_t offset = 0; offset < page_num; offset++)
+	{
+		pte = pgdir_walk(pgdir, (void *)(va + offset * PGSIZE), 1);
+		if (!pte)
+		{
+			panic("boot_map_region: pgdir_walk error.");
+		}
+		*pte = (pa + offset * PGSIZE) | perm | PTE_P;
+	}
 }
 
 //
@@ -436,6 +485,25 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
+	pte_t *pte = pgdir_walk(pgdir, va, 1);
+
+	if (!pte)
+	{
+		return -E_NO_MEM;
+	}
+
+	// Increase the ref count first, avoid the error occurs
+	// when pp is re-inserted(i.e. maybe be removed and freed first).
+	pp->pp_ref += 1;
+
+	if (*pte & PTE_P) // already a page mapped at 'va'
+	{
+		page_remove(pgdir, va);
+		tlb_invalidate(pgdir, va);
+	}
+
+	// Insert pp into pte
+	*pte = page2pa(pp) | perm | PTE_P;
 	return 0;
 }
 
@@ -454,7 +522,16 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+	pde_t *pte = pgdir_walk(pgdir, va, 0);
+
+	// Ther is no page mapped at va
+	if (!pte || !(*pte & PTE_P))
+		return NULL;
+	if (pte_store)
+	{
+		*pte_store = pte;
+	}
+	return pa2page(PTE_ADDR(*pte));
 }
 
 //
@@ -475,6 +552,14 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 void page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	pte_t *pte_store;
+	struct PageInfo *removed_page = page_lookup(pgdir, va, &pte_store);
+	if (removed_page)
+	{
+		page_decref(removed_page);
+		memset(pte_store, 0, sizeof(pte_t));
+		tlb_invalidate(pgdir, va);
+	}
 }
 
 //
@@ -751,6 +836,7 @@ check_page(void)
 
 	// should be able to map pp2 at PGSIZE because pp0 is already allocated for page table
 	assert(page_insert(kern_pgdir, pp2, (void *)PGSIZE, PTE_W) == 0);
+
 	assert(check_va2pa(kern_pgdir, PGSIZE) == page2pa(pp2));
 	assert(pp2->pp_ref == 1);
 
