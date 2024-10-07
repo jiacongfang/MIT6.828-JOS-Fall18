@@ -227,7 +227,7 @@ int mon_dumpmem(int argc, char **argv, struct Trapframe *tf)
 
 	uint32_t start_addr = (uint32_t)strtol(argv[2], 0, 0);
 	size_t length = (size_t)strtol(argv[3], 0, 0);
-	uint32_t end_addr = start_addr + length - 1;
+	uint32_t end_addr = start_addr + length;
 	uint32_t next; // Used to check if the range cross page.
 	pte_t *pte;
 
