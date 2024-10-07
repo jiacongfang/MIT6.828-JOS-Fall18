@@ -16,3 +16,8 @@
 /sol?/
 /myapi.key
 /.suf
+/__pycache__
+/useless
+/.vscode
+/*.pdf
+JOS_Lab2_Report.pdf
