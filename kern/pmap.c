@@ -9,6 +9,14 @@
 #include <kern/pmap.h>
 #include <kern/kclock.h>
 
+// Contrak marco for large page
+// #define OPEN_LARGE_PAGE
+
+#ifdef OPEN_LARGE_PAGE
+#define LPGSIZE (PGSIZE * 1024)
+static void large_boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm);
+#endif
+
 // These variables are set by i386_detect_memory()
 size_t npages;				  // Amount of physical memory (in pages)
 static size_t npages_basemem; // Amount of base memory (in pages)
@@ -211,10 +219,18 @@ void mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
+#ifdef OPEN_LARGE_PAGE
+	large_boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE + 1, 0, PTE_W);
+#else
 	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE + 1, 0, PTE_W);
+#endif
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
+
+#ifdef OPEN_LARGE_PAGE
+	lcr4(rcr4() | CR4_PSE); // Set PSE bits to open Large page
+#endif
 
 	// Switch from the minimal entry page directory to the full kern_pgdir
 	// page table we just created.	Our instruction pointer should be
@@ -446,7 +462,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	// Fill this function in
 
 	// Check va & pa
-	if ((va & (PGSIZE - 1)) || (pa & (PGSIZE - 1)))
+	if ((va & (PGSIZE - 1)) || (pa & (PGSIZE - 1)) || (size & (PGSHIFT - 1)))
 		panic("boot_map_region: va / pa are not page-aligned.");
 
 	size_t page_num = ROUNDUP(size, PGSIZE) / PGSIZE;
@@ -462,6 +478,22 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 		*pte = (pa + offset * PGSIZE) | perm | PTE_P;
 	}
 }
+
+/***** Large Page *****/
+// Map [va, va+size) of virtual address space to physical [pa, pa+size)
+// in the page table rooted at pgdir.  Size is a multiple of LPGSIZE, and
+// va and pa are both large-page-aligned.
+// Use permission bits perm|PTE_P for the entries.
+#ifdef OPEN_LARGE_PAGE
+static void
+large_boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
+{
+	if ((va & (LPGSIZE - 1)) || (pa & (LPGSIZE - 1)) || (size & (LPGSIZE - 1)))
+		panic("boot_map_region: va / pa are not large-page-aligned.");
+	for (int i = 0; i < size; i += LPGSIZE)
+		pgdir[PDX(va + i)] = (pte_t)(pa + i) | perm | PTE_P | PTE_PS; // Set the PS !
+}
+#endif
 
 //
 // Map the physical page 'pp' at virtual address 'va'.
@@ -792,10 +824,22 @@ check_va2pa(pde_t *pgdir, uintptr_t va)
 	pgdir = &pgdir[PDX(va)];
 	if (!(*pgdir & PTE_P))
 		return ~0;
+#ifdef OPEN_LARGE_PAGE
+	if (*pgdir & PTE_PS)
+		return PTE_ADDR(*pgdir) | (PTX(va) << PTXSHIFT) | PGOFF(va);
+	else
+	{
+		p = (pte_t *)KADDR(PTE_ADDR(*pgdir));
+		if (!(p[PTX(va)] & PTE_P))
+			return ~0;
+		return PTE_ADDR(p[PTX(va)]);
+	}
+#else
 	p = (pte_t *)KADDR(PTE_ADDR(*pgdir));
 	if (!(p[PTX(va)] & PTE_P))
 		return ~0;
 	return PTE_ADDR(p[PTX(va)]);
+#endif
 }
 
 // check page_insert, page_remove, &c
