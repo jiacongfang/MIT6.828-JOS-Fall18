@@ -10,6 +10,8 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
+#include <inc/mmu.h>
 
 #define CMDBUF_SIZE 80 // enough for one VGA text line
 
@@ -25,7 +27,15 @@ static struct Command commands[] = {
 	{"help", "Display this list of commands", mon_help},
 	{"kerninfo", "Display information about the kernel", mon_kerninfo},
 	{"backtrace", "Back trace the function call frames", mon_backtrace},
-};
+	{"showmappings",
+	 "Display the physical page mappings that apply to [start_va, end_va]",
+	 mon_showmappings},
+	{"setpermission",
+	 "Set, clear or change the permissions of mappping at [va]",
+	 mon_setpermission},
+	{"dumpmem",
+	 "Dump the contents of a range of memory given either a virtual or physical address range.",
+	 mon_dumpmem}};
 
 /***** Implementations of basic kernel monitor commands *****/
 
@@ -107,13 +117,190 @@ int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+/***** Lab 2: Kernel monitor about memory management *****/
+
+// Usage: showmappings start_va end_va
+int mon_showmappings(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc != 3)
+	{
+		cprintf("Usage: showmappings <start_va> <end_va>\n");
+		return 0;
+	}
+	uintptr_t va_start = (uintptr_t)strtol(argv[1], 0, 0);
+	uintptr_t va_end = (uintptr_t)strtol(argv[2], 0, 0);
+
+	// Align to  PGSIZE
+	va_start = ROUNDDOWN(va_start, PGSIZE);
+	va_end = ROUNDUP(va_end, PGSIZE);
+
+	physaddr_t phys;
+
+	for (; va_start <= va_end; va_start += PGSIZE)
+	{
+		pte_t *pte = pgdir_walk(kern_pgdir, (void *)va_start, 0);
+		if (!(pte && (*pte & PTE_P)))
+		{
+			cprintf("VisAddr: 0x%08x, PhysAddr: no mappings\n", va_start);
+		}
+		else
+		{
+			phys = PTE_ADDR(*pte);
+			cprintf("VisAddr: 0x%08x, PhysAddr: 0x%08x, PTE_U: %d, PTE_W: %d\n",
+					va_start, phys, (*pte & PTE_U) > 0, (*pte & PTE_W) > 0);
+		}
+	}
+	return 0;
+}
+
+// Usage: setpermission [va] [U=0/U=1] [W=0/W=1]
+int mon_setpermission(int argc, char **argv, struct Trapframe *tf)
+{
+	static const char *help_msg_1 = "Usage: setpermission [va] [U=0/U=1] [W=0/W=1]\n";
+	if (argc != 4)
+	{
+		cprintf(help_msg_1);
+		return 0;
+	}
+
+	uintptr_t va = ROUNDDOWN((uintptr_t)strtol(argv[1], 0, 0), PGSIZE);
+
+	uint16_t perm;
+
+	if (0 == strcmp(argv[2], "U=1"))
+		perm = PTE_U;
+	else if (0 == strcmp(argv[2], "U=0"))
+		perm = 0x000;
+	else
+	{
+		cprintf(help_msg_1);
+		return 0;
+	}
+
+	if (0 == strcmp(argv[3], "W=1"))
+		perm |= PTE_W;
+	else if (0 == strcmp(argv[3], "W=0"))
+	{
+	}
+	else
+	{
+		cprintf(help_msg_1);
+		return 0;
+	}
+
+	pte_t *pte = pgdir_walk(kern_pgdir, (void *)va, 0);
+	if (!(pte && (*pte & PTE_P)))
+		cprintf("VisAddr: 0x%08x, PhysAddr: no mappings\n", va);
+	else
+	{
+		*pte = (*pte & ~0xFFF) | perm | PTE_P;
+	}
+	return 0;
+}
+
+// Usage: dumpmem [-p/-v] start_va length
+int mon_dumpmem(int argc, char **argv, struct Trapframe *tf)
+{
+	static const char *help_msg_2 =
+		"Usage: dumpmem [-p/-v] start_addr length\n"
+		"\t -p : start_addr is physical address\n"
+		"\t -v : start_addr is visual address.\n"
+		"\t length: must be greater than 0\n";
+
+	if (argc != 4)
+	{
+		cprintf(help_msg_2);
+		return 0;
+	}
+
+	bool visual_flag;
+
+	if (0 == strcmp(argv[1], "-p"))
+		visual_flag = false;
+	else if (0 == strcmp(argv[1], "-v"))
+		visual_flag = true;
+	else
+	{
+		cprintf(help_msg_2);
+		return 0;
+	}
+
+	uint32_t start_addr = (uint32_t)strtol(argv[2], 0, 0);
+	size_t length = (size_t)strtol(argv[3], 0, 0);
+	uint32_t end_addr = start_addr + length - 1;
+	uint32_t next; // Used to check if the range cross page.
+	pte_t *pte;
+
+	if (length == 0)
+	{
+		cprintf("Length must be greater than zero.\n");
+		return 0;
+	}
+
+	if (visual_flag)
+	{ // Visual address
+		while (start_addr < end_addr)
+		{
+			pte = pgdir_walk(kern_pgdir, (void *)start_addr, 0);
+
+			if (!pte) // The relevant page table page might not exist yet.
+			{
+				next = (uint32_t)PGADDR(PDX(start_addr) + 1, 0, 0); // The next page dir entry
+				if (end_addr < next)
+					for (; start_addr < end_addr; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr: no mappings, None\n", start_addr);
+				else
+					for (; start_addr < next; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr: no mappings, None\n", start_addr);
+			}
+			else if (!(*pte & PTE_P)) // No such PTE
+			{
+				next = (uint32_t)PGADDR(PDX(start_addr), PTX(start_addr) + 1, 0); // The next page table entry
+				if (end_addr < next)
+					for (; start_addr < end_addr; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr: no mappings, None\n", start_addr);
+				else
+					for (; start_addr < next; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr: no mappings, None\n", start_addr);
+			}
+			else // PTE exists
+			{
+				next = (uint32_t)PGADDR(PDX(start_addr), PTX(start_addr) + 1, 0); // The next page table entry
+				if (end_addr < next)
+					for (; start_addr < end_addr; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr:0x%08x, %02x\n",
+								start_addr, PTE_ADDR(*pte), *(uint8_t *)start_addr);
+				else
+					for (; start_addr < next; start_addr++)
+						cprintf("VisAddr: 0x%08x, PhysAddr:0x%08x, %02x\n",
+								start_addr, PTE_ADDR(*pte), *(uint8_t *)start_addr);
+			}
+		}
+	}
+	else
+	{
+		if (end_addr > npages * PGSIZE || end_addr > 0xffffffff - KERNBASE + 1)
+		{
+			cprintf("Out of memory, please change address and length.\n");
+			return 0;
+		}
+
+		// Use KADDR to get the response kernel visual address
+		for (; start_addr <= end_addr; start_addr++)
+		{
+			cprintf("PA: 0x%08x, %02x\n", start_addr, *(uint8_t *)KADDR(start_addr));
+		}
+		return 0;
+	}
+	return 0;
+}
+
 /***** Kernel monitor command interpreter *****/
 
 #define WHITESPACE "\t\r\n "
 #define MAXARGS 16
 
-static int
-runcmd(char *buf, struct Trapframe *tf)
+static int runcmd(char *buf, struct Trapframe *tf)
 {
 	int argc;
 	char *argv[MAXARGS];
