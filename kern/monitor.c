@@ -36,7 +36,10 @@ static struct Command commands[] = {
 	 mon_setpermission},
 	{"dumpmem",
 	 "Dump the contents of a range of memory given either a virtual or physical address range.",
-	 mon_dumpmem}};
+	 mon_dumpmem},
+	{"step", "Single step the kernel", mon_step},
+	{"continue", "Continue the kernel", mon_continue},
+};
 
 /***** Implementations of basic kernel monitor commands *****/
 
@@ -96,14 +99,35 @@ int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	while (ebp)
 	{
 		uint32_t eip = *((uint32_t *)(ebp + 4));
-		cprintf("ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
-				ebp,
-				eip,
-				*((uint32_t *)(ebp + 8)),
-				*((uint32_t *)(ebp + 12)),
-				*((uint32_t *)(ebp + 16)),
-				*((uint32_t *)(ebp + 20)),
-				*((uint32_t *)(ebp + 24)));
+		// cprintf("ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
+		// 		ebp,
+		// 		eip,
+		// 		*((uint32_t *)(ebp + 8)),
+		// 		*((uint32_t *)(ebp + 12)),
+		// 		*((uint32_t *)(ebp + 16)),
+		// 		*((uint32_t *)(ebp + 20)),
+		// 		*((uint32_t *)(ebp + 24)));
+
+		if ((uint32_t)ebp == 0xeebfdff0)
+		{ // handle the stack created by _start
+			cprintf("  ebp %08x  eip %08x  args %08x %08x\n",
+					ebp,
+					eip,
+					*((uint32_t *)(ebp + 8)),
+					*((uint32_t *)(ebp + 12)));
+		}
+		else
+		{
+			cprintf("  ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
+					ebp,
+					eip,
+					*((uint32_t *)(ebp + 8)),
+					*((uint32_t *)(ebp + 12)),
+					*((uint32_t *)(ebp + 16)),
+					*((uint32_t *)(ebp + 20)),
+					*((uint32_t *)(ebp + 24)));
+		}
+
 		struct Eipdebuginfo info;
 		debuginfo_eip(eip, &info);
 		// Example kern/monitor.c:143: monitor+106
@@ -119,6 +143,31 @@ int mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 }
 
 /***** Lab 2: Kernel monitor about memory management *****/
+
+/***** Lab 3: Challenge 2 Add Support to Step and Continue *****/
+int mon_step(int argc, char **argv, struct Trapframe *tf)
+{
+	// Check if the monitor is called by the trap handler in user mode.
+	if (!(tf && ((tf->tf_cs & 0x3) == 0x3) && (tf->tf_trapno == T_BRKPT || tf->tf_trapno == T_DEBUG)))
+	{
+		cprintf("The monitor is not called by the trap handler in user mode.\n");
+		return 0;
+	}
+	tf->tf_eflags |= FL_TF;
+	return -1;
+}
+
+int mon_continue(int argc, char **argv, struct Trapframe *tf)
+{
+	// Check if the monitor is called by the trap handler in user mode.
+	if (!(tf && ((tf->tf_cs & 0x3) == 0x3) && (tf->tf_trapno == T_BRKPT || tf->tf_trapno == T_DEBUG)))
+	{
+		cprintf("The monitor is not called by the trap handler in user mode.\n");
+		return 0;
+	}
+	tf->tf_eflags &= ~FL_TF;
+	return -1;
+}
 
 // Usage: showmappings start_va end_va
 int mon_showmappings(int argc, char **argv, struct Trapframe *tf)
