@@ -197,6 +197,10 @@ trap_dispatch(struct Trapframe *tf)
 			tf->tf_regs.reg_edi,
 			tf->tf_regs.reg_esi);
 		return;
+	case T_DEBUG:
+		cprintf("In Debug trap: Single Step at 0x%08x\n", tf->tf_eip);
+		monitor(tf);
+		return;
 	default:
 		// Unexpected trap: The user process or the kernel has a bug.
 		print_trapframe(tf);

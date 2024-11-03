@@ -153,6 +153,7 @@ int mon_step(int argc, char **argv, struct Trapframe *tf)
 		cprintf("The monitor is not called by the trap handler in user mode.\n");
 		return 0;
 	}
+	cprintf("Step the kernel\n");
 	tf->tf_eflags |= FL_TF;
 	return -1;
 }
