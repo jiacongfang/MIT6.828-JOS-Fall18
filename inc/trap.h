@@ -76,10 +76,10 @@ struct Trapframe
 	uint16_t tf_padding4;
 } __attribute__((packed));
 
-<<<<<<< HEAD
-struct UTrapframe {
+struct UTrapframe
+{
 	/* information about the fault */
-	uint32_t utf_fault_va;	/* va for T_PGFLT, 0 otherwise */
+	uint32_t utf_fault_va; /* va for T_PGFLT, 0 otherwise */
 	uint32_t utf_err;
 	/* trap-time return state */
 	struct PushRegs utf_regs;
@@ -89,8 +89,6 @@ struct UTrapframe {
 	uintptr_t utf_esp;
 } __attribute__((packed));
 
-=======
->>>>>>> lab3
 #endif /* !__ASSEMBLER__ */
 
 #endif /* !JOS_INC_TRAP_H */

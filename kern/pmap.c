@@ -297,7 +297,11 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	for (int i = 0; i < NCPU; i++)
+	{
+		uint32_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W);
+	}
 }
 
 // --------------------------------------------------------------
@@ -353,6 +357,13 @@ void page_init(void)
 		// The IO hole must never be allocated.
 		// Notice that [EXTPHYSMEM, boot_alloc(0)) used by kernel and some global variables.
 		if (i >= PGNUM(IOPHYSMEM) && i < PGNUM(PADDR(boot_alloc(0))))
+		{
+			pages[i].pp_ref = 1;
+			pages[i].pp_link = NULL;
+		}
+		// Change your code to mark the physical page at MPENTRY_PADDR
+		// as in use
+		else if (i == PGNUM(MPENTRY_PADDR))
 		{
 			pages[i].pp_ref = 1;
 			pages[i].pp_link = NULL;
@@ -693,7 +704,15 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	size = ROUNDUP(size, PGSIZE);
+	if (base + size > MMIOLIM)
+	{
+		panic("mmio_map_region: out of memory.");
+	}
+	boot_map_region(kern_pgdir, base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	uintptr_t returned_base = base;
+	base += size;
+	return (void *)returned_base;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -816,13 +835,9 @@ check_page_free_list(bool only_low_memory)
 		assert(page2pa(pp) != IOPHYSMEM);
 		assert(page2pa(pp) != EXTPHYSMEM - PGSIZE);
 		assert(page2pa(pp) != EXTPHYSMEM);
-<<<<<<< HEAD
-		assert(page2pa(pp) < EXTPHYSMEM || (char *) page2kva(pp) >= first_free_page);
+		assert(page2pa(pp) < EXTPHYSMEM || (char *)page2kva(pp) >= first_free_page);
 		// (new test for lab 4)
 		assert(page2pa(pp) != MPENTRY_PADDR);
-=======
-		assert(page2pa(pp) < EXTPHYSMEM || (char *)page2kva(pp) >= first_free_page);
->>>>>>> lab3
 
 		if (page2pa(pp) < EXTPHYSMEM)
 			++nfree_basemem;
@@ -945,11 +960,11 @@ check_kern_pgdir(void)
 
 	// check kernel stack
 	// (updated in lab 4 to check per-CPU kernel stacks)
-	for (n = 0; n < NCPU; n++) {
+	for (n = 0; n < NCPU; n++)
+	{
 		uint32_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (n + 1);
 		for (i = 0; i < KSTKSIZE; i += PGSIZE)
-			assert(check_va2pa(pgdir, base + KSTKGAP + i)
-				== PADDR(percpu_kstacks[n]) + i);
+			assert(check_va2pa(pgdir, base + KSTKGAP + i) == PADDR(percpu_kstacks[n]) + i);
 		for (i = 0; i < KSTKGAP; i += PGSIZE)
 			assert(check_va2pa(pgdir, base + i) == ~0);
 	}
@@ -1164,8 +1179,8 @@ check_page(void)
 	page_free(pp2);
 
 	// test mmio_map_region
-	mm1 = (uintptr_t) mmio_map_region(0, 4097);
-	mm2 = (uintptr_t) mmio_map_region(0, 4096);
+	mm1 = (uintptr_t)mmio_map_region(0, 4097);
+	mm2 = (uintptr_t)mmio_map_region(0, 4096);
 	// check that they're in the right region
 	assert(mm1 >= MMIOBASE && mm1 + 8192 < MMIOLIM);
 	assert(mm2 >= MMIOBASE && mm2 + 8192 < MMIOLIM);
@@ -1175,16 +1190,16 @@ check_page(void)
 	assert(mm1 + 8192 <= mm2);
 	// check page mappings
 	assert(check_va2pa(kern_pgdir, mm1) == 0);
-	assert(check_va2pa(kern_pgdir, mm1+PGSIZE) == PGSIZE);
+	assert(check_va2pa(kern_pgdir, mm1 + PGSIZE) == PGSIZE);
 	assert(check_va2pa(kern_pgdir, mm2) == 0);
-	assert(check_va2pa(kern_pgdir, mm2+PGSIZE) == ~0);
+	assert(check_va2pa(kern_pgdir, mm2 + PGSIZE) == ~0);
 	// check permissions
-	assert(*pgdir_walk(kern_pgdir, (void*) mm1, 0) & (PTE_W|PTE_PWT|PTE_PCD));
-	assert(!(*pgdir_walk(kern_pgdir, (void*) mm1, 0) & PTE_U));
+	assert(*pgdir_walk(kern_pgdir, (void *)mm1, 0) & (PTE_W | PTE_PWT | PTE_PCD));
+	assert(!(*pgdir_walk(kern_pgdir, (void *)mm1, 0) & PTE_U));
 	// clear the mappings
-	*pgdir_walk(kern_pgdir, (void*) mm1, 0) = 0;
-	*pgdir_walk(kern_pgdir, (void*) mm1 + PGSIZE, 0) = 0;
-	*pgdir_walk(kern_pgdir, (void*) mm2, 0) = 0;
+	*pgdir_walk(kern_pgdir, (void *)mm1, 0) = 0;
+	*pgdir_walk(kern_pgdir, (void *)mm1 + PGSIZE, 0) = 0;
+	*pgdir_walk(kern_pgdir, (void *)mm2, 0) = 0;
 
 	cprintf("check_page() succeeded!\n");
 }
