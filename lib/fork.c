@@ -139,7 +139,6 @@ fork(void)
 		return 0;
 	}
 
-	cprintf("fork: parent envid = %08x, child envid = %08x\n", sys_getenvid(), envid);
 	// We're the parent.
 	// 3. For each writable or copy-on-write page in its address space below UTOP,
 	// the parent calls duppage, which should map the page copy-on-write into

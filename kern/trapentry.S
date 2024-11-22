@@ -68,6 +68,13 @@ TRAPHANDLER(handler_gpflt, T_GPFLT);
 TRAPHANDLER(handler_pgflt, T_PGFLT);
 TRAPHANDLER(handler_align, T_ALIGN);
 
+TRAPHANDLER_NOEC(handler_irq_timer, IRQ_OFFSET + IRQ_TIMER);
+TRAPHANDLER_NOEC(handler_irq_kbd, IRQ_OFFSET + IRQ_KBD);
+TRAPHANDLER_NOEC(handler_irq_serial, IRQ_OFFSET + IRQ_SERIAL);
+TRAPHANDLER_NOEC(handler_irq_spurious, IRQ_OFFSET + IRQ_SPURIOUS);
+TRAPHANDLER_NOEC(handler_irq_ide, IRQ_OFFSET + IRQ_IDE);
+TRAPHANDLER_NOEC(handler_irq_error, IRQ_OFFSET + IRQ_ERROR);
+
 
 /*
  * Lab 3: Your code here for _alltraps
