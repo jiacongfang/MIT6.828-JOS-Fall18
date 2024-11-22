@@ -369,10 +369,40 @@ void page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if (curenv->env_pgfault_upcall == NULL)
+	{
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+				curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
+	}
+	else
+	{
+		uint32_t esp;
+		// Check if the current stack is the exception stack
+		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP)
+		{
+			esp = (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+			*(uint32_t *)(tf->tf_esp - 4) = 0; // push a 32-bit empty word
+		}
+		else
+			esp = (UXSTACKTOP - sizeof(struct UTrapframe));
 
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-			curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+		struct UTrapframe *utf = (struct UTrapframe *)esp;
+		// Check if the permission
+		// cprintf("Page fault upcall: envid = %08x, fault_va = %08x, utf = %08x\n", curenv->env_id, fault_va, utf);
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_W | PTE_U);
+		// cprintf("Passed user_mem_assert\n");
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_err = tf->tf_err;
+		utf->utf_fault_va = fault_va;
+
+		tf->tf_esp = (uintptr_t)esp;
+		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		env_run(curenv);
+	}
 }

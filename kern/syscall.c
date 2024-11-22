@@ -229,8 +229,14 @@ sys_page_map(envid_t srcenvid, void *srcva,
 		(uintptr_t)dstva >= UTOP || (uintptr_t)dstva % PGSIZE != 0)
 		return -E_INVAL;
 
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 1\n");
+
 	if ((perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P) || (perm & ~PTE_SYSCALL) != 0)
 		return -E_INVAL;
+
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 2\n");
 
 	int error;
 	struct Env *srcenv, *dstenv;
@@ -239,15 +245,28 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	if ((error = envid2env(dstenvid, &dstenv, 1)) < 0)
 		return error;
 
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 3\n");
+
 	pte_t *pte;
 	struct PageInfo *pp = page_lookup(srcenv->env_pgdir, srcva, &pte);
+
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 4\n");
+
 	if (pp == NULL)
 		return -E_INVAL;
 	if ((*pte & PTE_W) == 0 && (perm & PTE_W) != 0)
 		return -E_INVAL;
 
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 5\n");
+
 	if ((error = page_insert(dstenv->env_pgdir, pp, dstva, perm)) < 0)
 		return error;
+
+	// if (srcenvid == dstenvid)
+	// 	cprintf("srcenvid == dstenvid 6, %08x\n", curenv->env_id);
 
 	return 0;
 }
@@ -362,7 +381,6 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_env_destroy:
 		return sys_env_destroy(a1);
 	case SYS_yield:
-		// cprintf("syscall: yield\n");
 		sys_yield();
 		return 0;
 	case SYS_exofork:
@@ -375,6 +393,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
 	case SYS_page_unmap:
 		return sys_page_unmap(a1, (void *)a2);
+	case SYS_env_set_pgfault_upcall:
+		return sys_env_set_pgfault_upcall(a1, (void *)a2);
 	default:
 		return -E_INVAL;
 	}
