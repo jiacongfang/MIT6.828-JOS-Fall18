@@ -175,9 +175,78 @@ fork(void)
 	return envid;
 }
 
+// map the page of the parent to the child, without modifying the permissions
+static int
+sduppage(envid_t envid, unsigned pn)
+{
+	int parent_id = sys_getenvid();
+	void *add = (void *)(pn * PGSIZE);
+	int r;
+	if ((r = sys_page_map(parent_id, add, envid, add, uvpt[pn] & 0xfff & PTE_SYSCALL)) < 0)
+		panic("sduppage (sys_page_map): %e", r);
+
+	return 0;
+}
+
 // Challenge!
 int sfork(void)
 {
-	panic("sfork not implemented");
-	return -E_INVAL;
+	envid_t envid;
+	int r;
+
+	// 1. install `pgfault` as the page fault handler
+	set_pgfault_handler(pgfault);
+
+	// 2. Create a child.
+	envid = sys_exofork();
+	if (envid < 0)
+		panic("sys_exofork: %e", envid);
+	if (envid == 0)
+	{
+		// We're the child.
+		thisenv = &envs[ENVX(sys_getenvid())];
+		// cprintf("fork: child envid = %08x\n", thisenv->env_id);
+		// return 0 to the child
+		return 0;
+	}
+
+	// We're the parent.
+	// 从栈底开始向下复制，在用户栈的部分使用 duppage(COW), 在其他部分使用 sduppage(共享内存)
+	uint32_t add;
+	for (add = USTACKTOP - PGSIZE; add >= UTEXT; add -= PGSIZE)
+	{
+		if ((uvpd[PDX(add)] & PTE_P) == PTE_P && (uvpt[PGNUM(add)] & PTE_P) == PTE_P)
+		{
+			if ((r = duppage(envid, PGNUM(add))) < 0)
+				return r;
+		}
+		else
+			break; // 抵达栈顶, 剩下的部分直接共享内存
+	}
+
+	for (; add >= UTEXT; add -= PGSIZE)
+	{
+		if ((uvpd[PDX(add)] & PTE_P) == PTE_P && (uvpt[PGNUM(add)] & PTE_P) == PTE_P)
+		{
+			if ((r = sduppage(envid, PGNUM(add))) < 0)
+				return r;
+		}
+	}
+
+	extern void _pgfault_upcall(void);
+
+	// allocate a fresh page in the child for the exception stack.
+	if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_P | PTE_U | PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+
+	// 4. set the user page fault entrypoint for the child
+	if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0)
+		panic("sys_env_set_pgfault_upcall: %e", r);
+
+	// 5. mark the child as runnable
+	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+		panic("sys_env_set_status: %e", r);
+
+	// 6. return the child's envid to the parent
+	return envid;
 }
