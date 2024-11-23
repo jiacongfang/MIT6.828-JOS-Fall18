@@ -263,6 +263,15 @@ int env_alloc(struct Env **newenv_store, envid_t parent_id)
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
 
+	// Clear the zero divide handler until user installs one.
+	e->env_zerodiv_upcall = 0;
+
+	// Clear the general protection fault handler until user installs one.
+	e->env_gpflt_upcall = 0;
+
+	// Clear the illegal instruction handler until user installs one.
+	e->env_illop_upcall = 0;
+
 	// Also clear the IPC receiving flag.
 	e->env_ipc_recving = 0;
 

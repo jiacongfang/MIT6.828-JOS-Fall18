@@ -2,7 +2,8 @@
 #define JOS_INC_SYSCALL_H
 
 /* system call numbers */
-enum {
+enum
+{
 	SYS_cputs = 0,
 	SYS_cgetc,
 	SYS_getenvid,
@@ -13,6 +14,9 @@ enum {
 	SYS_exofork,
 	SYS_env_set_status,
 	SYS_env_set_pgfault_upcall,
+	SYS_env_set_zerodiv_upcall,
+	SYS_env_set_gpflt_upcall,
+	SYS_env_set_illop_upcall,
 	SYS_yield,
 	SYS_ipc_try_send,
 	SYS_ipc_recv,

@@ -249,6 +249,19 @@ trap_dispatch(struct Trapframe *tf)
 		cprintf("In Debug trap: Single Step at 0x%08x\n", tf->tf_eip);
 		monitor(tf);
 		return;
+	case T_DIVIDE:
+		// Call the divide by zero handler
+		cprintf("Divide by zero at 0x%08x\n", tf->tf_eip);
+		zerodiv_handler(tf);
+		return;
+	case T_GPFLT:
+		cprintf("General Protection Fault at 0x%08x\n", tf->tf_eip);
+		gpflt_handler(tf);
+		return;
+	case T_ILLOP:
+		cprintf("Illegal Opcode at 0x%08x\n", tf->tf_eip);
+		illop_handler(tf);
+		return;
 	default:
 		// Handle spurious interrupts
 		// The hardware sometimes raises these because of noise on the
@@ -271,6 +284,8 @@ trap_dispatch(struct Trapframe *tf)
 		}
 
 		// Unexpected trap: The user process or the kernel has a bug.
+		cprintf("Unexpected trap %d from cpu %d eip %08x (cr2=0x%08x)\n",
+				tf->tf_trapno, cpunum(), tf->tf_eip, rcr2());
 		print_trapframe(tf);
 		if (tf->tf_cs == GD_KT)
 			panic("unhandled trap in kernel");
@@ -424,6 +439,135 @@ void page_fault_handler(struct Trapframe *tf)
 
 		tf->tf_esp = (uintptr_t)esp;
 		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		env_run(curenv);
+	}
+}
+
+// LAB 4: Challenge implemente the handler for division by zero
+void zerodiv_handler(struct Trapframe *tf)
+{
+	uint32_t fault_va;
+
+	// Read processor's CR2 register to find the faulting address
+	fault_va = rcr2();
+
+	// handle the division by zero
+	if (curenv->env_zerodiv_upcall == NULL)
+	{
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] i faulted at va %08x\n", curenv->env_id, fault_va);
+		env_destroy(curenv);
+	}
+	else
+	{
+		uint32_t esp;
+		// Check if the current stack is the exception stack
+		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP)
+		{
+			esp = (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+			*(uint32_t *)(tf->tf_esp - 4) = 0; // push a 32-bit empty word
+		}
+		else
+			esp = (UXSTACKTOP - sizeof(struct UTrapframe));
+
+		struct UTrapframe *utf = (struct UTrapframe *)esp;
+		// Check if the permission
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_W | PTE_U);
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_err = tf->tf_err;
+		utf->utf_fault_va = fault_va;
+
+		tf->tf_esp = (uintptr_t)esp;
+		tf->tf_eip = (uintptr_t)curenv->env_zerodiv_upcall;
+		env_run(curenv);
+	}
+}
+
+// LAB 4: Challenge implemente the handler for gerenal protection fault
+void gpflt_handler(struct Trapframe *tf)
+{
+	uint32_t fault_va;
+
+	// Read processor's CR2 register to find the faulting address
+	fault_va = rcr2();
+
+	// handle the general protection fault
+	if (curenv->env_gpflt_upcall == NULL)
+	{
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] i faulted at va %08x\n", curenv->env_id, fault_va);
+		env_destroy(curenv);
+	}
+	else
+	{
+		uint32_t esp;
+		// Check if the current stack is the exception stack
+		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP)
+		{
+			esp = (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+			*(uint32_t *)(tf->tf_esp - 4) = 0; // push a 32-bit empty word
+		}
+		else
+			esp = (UXSTACKTOP - sizeof(struct UTrapframe));
+
+		struct UTrapframe *utf = (struct UTrapframe *)esp;
+		// Check if the permission
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_W | PTE_U);
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_err = tf->tf_err;
+		utf->utf_fault_va = fault_va;
+
+		tf->tf_esp = (uintptr_t)esp;
+		tf->tf_eip = (uintptr_t)curenv->env_gpflt_upcall;
+		env_run(curenv);
+	}
+}
+
+// LAB 4: Challenge implemente the handler for illegal opcode
+void illop_handler(struct Trapframe *tf)
+{
+	uint32_t fault_va;
+
+	// Read processor's CR2 register to find the faulting address
+	fault_va = rcr2();
+
+	// handle the illegal opcode
+	if (curenv->env_illop_upcall == NULL)
+	{
+		// Destroy the environment that caused the fault.
+		cprintf("[%08x] i faulted at va %08x\n", curenv->env_id, fault_va);
+		env_destroy(curenv);
+	}
+	else
+	{
+		uint32_t esp;
+		// Check if the current stack is the exception stack
+		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP)
+		{
+			esp = (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+			*(uint32_t *)(tf->tf_esp - 4) = 0; // push a 32-bit empty word
+		}
+		else
+			esp = (UXSTACKTOP - sizeof(struct UTrapframe));
+
+		struct UTrapframe *utf = (struct UTrapframe *)esp;
+		// Check if the permission
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_W | PTE_U);
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_err = tf->tf_err;
+		utf->utf_fault_va = fault_va;
+
+		tf->tf_esp = (uintptr_t)esp;
+		tf->tf_eip = (uintptr_t)curenv->env_illop_upcall;
 		env_run(curenv);
 	}
 }

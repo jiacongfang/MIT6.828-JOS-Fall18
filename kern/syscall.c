@@ -146,6 +146,42 @@ sys_env_set_pgfault_upcall(envid_t envid, void *func)
 	return 0;
 }
 
+// Lab 4: Challenge implemente the handler for division by zero
+static int
+sys_env_set_zerodiv_upcall(envid_t envid, void *func)
+{
+	struct Env *env;
+	int error = envid2env(envid, &env, 1);
+	if (error < 0)
+		return error;
+	env->env_zerodiv_upcall = func;
+	return 0;
+}
+
+// Lab 4: Challenge implemente the handler for illegal operation
+static int
+sys_env_set_gpflt_upcall(envid_t envid, void *func)
+{
+	struct Env *env;
+	int error = envid2env(envid, &env, 1);
+	if (error < 0)
+		return error;
+	env->env_gpflt_upcall = func;
+	return 0;
+}
+
+// Lab 4: Challenge implemente the handler for general protection fault
+static int
+sys_env_set_illop_upcall(envid_t envid, void *func)
+{
+	struct Env *env;
+	int error = envid2env(envid, &env, 1);
+	if (error < 0)
+		return error;
+	env->env_illop_upcall = func;
+	return 0;
+}
+
 // Allocate a page of memory and map it at 'va' with permission
 // 'perm' in the address space of 'envid'.
 // The page's contents are set to 0.
@@ -446,6 +482,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_page_unmap(a1, (void *)a2);
 	case SYS_env_set_pgfault_upcall:
 		return sys_env_set_pgfault_upcall(a1, (void *)a2);
+	case SYS_env_set_zerodiv_upcall:
+		return sys_env_set_zerodiv_upcall(a1, (void *)a2);
+	case SYS_env_set_gpflt_upcall:
+		return sys_env_set_gpflt_upcall(a1, (void *)a2);
+	case SYS_env_set_illop_upcall:
+		return sys_env_set_illop_upcall(a1, (void *)a2);
 	case SYS_ipc_try_send:
 		return sys_ipc_try_send(a1, a2, (void *)a3, a4);
 	case SYS_ipc_recv:
