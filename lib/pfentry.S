@@ -12,9 +12,9 @@
 // exception stack, and then it pushes a UTrapframe onto our user
 // exception stack:
 //
-//	trap-time esp
+//	trap-time esp		   <-- 0x30(%esp)
 //	trap-time eflags
-//	trap-time eip
+//	trap-time eip		   <-- 0x28(%esp)
 //	utf_regs.reg_eax
 //	...
 //	utf_regs.reg_esi
@@ -28,6 +28,26 @@
 //
 // We then have call up to the appropriate page fault handler in C
 // code, pointed to by the global variable '_pgfault_handler'.
+
+// After `_pgfault_upcall` is called, the stack looks like this:
+//
+//    Previous Frame                 User Trap Frame
+// +------------------+            +------------------+
+// | stack data       |      +---- | trap-time esp-4  |
+// | ...              |      |     | trap-time eflags |
+// | trap-time eip    |      |     | trap-time eip    | (*)
+// +------------------+ <----+     | trap-time eax    | <-- utf_regs end  
+//                                 | trap-time ecx    | .
+//                                 | trap-time edx    | .
+//                                 | trap-time ebx    | .
+//                                 | trap-time esp    | .
+//                                 | trap-time ebp    | .
+//                                 | trap-time esi    | .
+//                                 | trap-time edi    | <-- utf_regs start
+//                                 | tf_err           |
+//                                 | fault_va         |
+//                                 +------------------+  <-- %esp
+
 
 .text
 .globl _pgfault_upcall
@@ -65,18 +85,29 @@ _pgfault_upcall:
 	// ways as registers become unavailable as scratch space.
 	//
 	// LAB 4: Your code here.
+	movl 0x30(%esp), %eax 	// save the trap-time esp in %eax
+	movl 0x28(%esp), %edx 	// save the trap-time eip in %edx
+	subl $4, %eax 			// adjust the trap-time esp
+	movl %edx, (%eax) 		// push the trap-time eip onto previous trap-time stack
+	movl %eax, 0x30(%esp) 	// update the trap-time esp
 
 	// Restore the trap-time registers.  After you do this, you
 	// can no longer modify any general-purpose registers.
 	// LAB 4: Your code here.
+	addl $8, %esp 			// skip the trap-time eflags and eip
+	popal 					// pop all the registers into the corresponding registers
 
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
 	// LAB 4: Your code here.
+	addl $4, %esp 			// skip %eip as (*) above 
+	popfl 					// pop the trap-time eflags	in %eflags
 
 	// Switch back to the adjusted trap-time stack.
 	// LAB 4: Your code here.
+	pop %esp 		// switch to the adjusted trap-time stack
 
 	// Return to re-execute the instruction that faulted.
 	// LAB 4: Your code here.
+	ret

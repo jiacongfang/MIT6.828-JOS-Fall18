@@ -14,7 +14,13 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/pgfault.c \
 			lib/pfentry.S \
 			lib/fork.c \
-			lib/ipc.c
+			lib/ipc.c \
+			lib/zerodiv.c \
+			lib/zerodiventry.S \
+			lib/gpflt.c \
+			lib/gpfltentry.S \
+			lib/illop.c \
+			lib/illopentry.S 
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/args.c \
