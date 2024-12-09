@@ -78,7 +78,13 @@ duppage(envid_t envid, unsigned pn)
 	assert(uvpt[pn] & PTE_U);
 
 	// check if the page is writable or copy-on-write
-	if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW))
+	// LAB 5: Add the PTE_SHARE case
+	if (uvpt[pn] & PTE_SHARE)
+	{
+		if ((r = sys_page_map(parent_envid, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), uvpt[pn] & PTE_SYSCALL)) < 0)
+			return r;
+	}
+	else if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW))
 	{
 		// map the page copy-on-write into the address space of the child
 		if ((r = sys_page_map(parent_envid, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), PTE_P | PTE_U | PTE_COW)) < 0)

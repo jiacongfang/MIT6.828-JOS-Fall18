@@ -303,9 +303,21 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
 }
 
 // Copy the mappings for shared pages into the child address space.
+// Like `fork`, but for shared pages.
 static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	for (uint32_t add = 0; add < UTOP - PGSIZE; add += PGSIZE)
+	{
+		// Check if the page is *present* and *shared* in the parent's address space
+		if ((uvpd[PDX(add)] & PTE_P) == PTE_P && (uvpt[PGNUM(add)] & PTE_P) == PTE_P && (uvpt[PGNUM(add)] & PTE_SHARE) == PTE_SHARE)
+		{
+			int r;
+			// Use PTE_SHARE in the child's address space to map the page
+			if ((r = sys_page_map(0, (void *)add, child, (void *)add, uvpt[PGNUM(add)] & PTE_SYSCALL)) < 0)
+				return r;
+		}
+	}
 	return 0;
 }
