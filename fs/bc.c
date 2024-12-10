@@ -47,7 +47,7 @@ bc_pgfault(struct UTrapframe *utf)
 	//
 	// LAB 5: you code here:
 	addr = ROUNDDOWN(addr, PGSIZE);
-	if ((r = sys_page_alloc(0, addr, PTE_SYSCALL)) < 0)
+	if ((r = sys_page_alloc(0, addr, PTE_U | PTE_P | PTE_W)) < 0)
 		panic("in bc_pgfault, sys_page_alloc: %e", r);
 	if ((r = ide_read(blockno * BLKSECTS, addr, BLKSECTS)) < 0)
 		panic("in bc_pgfault, ide_read: %e", r);
@@ -81,10 +81,10 @@ void flush_block(void *addr)
 		panic("flush_block of bad va %08x", addr);
 
 	// LAB 5: Your code here.
-	int r;
+	addr = ROUNDDOWN(addr, PGSIZE);
 	if (!va_is_mapped(addr) || !va_is_dirty(addr))
 		return;
-	addr = ROUNDDOWN(addr, PGSIZE);
+	int r;
 	// Write the block to disk
 	if ((r = ide_write(blockno * BLKSECTS, addr, BLKSECTS)) < 0)
 		panic("in flush_block, ide_write: %e", r);

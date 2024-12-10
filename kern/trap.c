@@ -14,6 +14,8 @@
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
 
+#define debug 0
+
 static struct Taskstate ts;
 
 /* For debugging, so print_trapframe can distinguish between printing
@@ -255,7 +257,7 @@ trap_dispatch(struct Trapframe *tf)
 		zerodiv_handler(tf);
 		return;
 	case T_GPFLT:
-		cprintf("General Protection Fault at 0x%08x\n", tf->tf_eip);
+		cprintf("TRAP: General Protection Fault at 0x%08x\n", tf->tf_eip);
 		gpflt_handler(tf);
 		return;
 	case T_ILLOP:
@@ -366,7 +368,11 @@ void trap(struct Trapframe *tf)
 	// scheduled, so we should return to the current environment
 	// if doing so makes sense.
 	if (curenv && curenv->env_status == ENV_RUNNING)
+	{
+		if (debug)
+			cprintf("trap(): [%08x] Returning to environment %08x\n", cpunum(), curenv->env_id);
 		env_run(curenv);
+	}
 	else
 		sched_yield();
 }
@@ -452,6 +458,8 @@ void page_fault_handler(struct Trapframe *tf)
 
 		tf->tf_esp = (uintptr_t)esp;
 		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		if (debug)
+			cprintf("page_fault(): [%08x] Calling page fault upcall at %08x\n", cpunum(), tf->tf_eip);
 		env_run(curenv);
 	}
 }
@@ -495,6 +503,8 @@ void zerodiv_handler(struct Trapframe *tf)
 
 		tf->tf_esp = (uintptr_t)esp;
 		tf->tf_eip = (uintptr_t)curenv->env_zerodiv_upcall;
+		if (debug)
+			cprintf("zerodiv_handler(): [%08x] Calling zero divide upcall at %08x\n", cpunum(), tf->tf_eip);
 		env_run(curenv);
 	}
 }
@@ -538,6 +548,8 @@ void gpflt_handler(struct Trapframe *tf)
 
 		tf->tf_esp = (uintptr_t)esp;
 		tf->tf_eip = (uintptr_t)curenv->env_gpflt_upcall;
+		if (debug)
+			cprintf("gpflt_handler(): [%08x] Calling general protection fault upcall at %08x\n", cpunum(), tf->tf_eip);
 		env_run(curenv);
 	}
 }
@@ -581,6 +593,8 @@ void illop_handler(struct Trapframe *tf)
 
 		tf->tf_esp = (uintptr_t)esp;
 		tf->tf_eip = (uintptr_t)curenv->env_illop_upcall;
+		if (debug)
+			cprintf("illop_handler(): [%08x] Calling illegal opcode upcall at %08x\n", cpunum(), tf->tf_eip);
 		env_run(curenv);
 	}
 }

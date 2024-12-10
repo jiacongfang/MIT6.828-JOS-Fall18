@@ -5,6 +5,8 @@
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 
+#define debug 0
+
 void sched_halt(void);
 
 // Choose a user environment to run and run it.
@@ -35,17 +37,38 @@ void sched_yield(void)
 	for (int i = cur_id + 1; i < NENV; ++i)
 	{
 		if (envs[i].env_status == ENV_RUNNABLE)
+		{
+			if (debug)
+			{
+				cprintf("1\n");
+				cprintf("[%08x] sched_yield: env %08x is runnable\n", curenv ? curenv->env_id : 0, envs[i].env_id);
+			}
 			env_run(&envs[i]);
+		}
 	}
 
 	for (int i = 0; i < cur_id; ++i)
 	{
 		if (envs[i].env_status == ENV_RUNNABLE)
+		{
+			if (debug)
+			{
+				cprintf("2\n");
+				cprintf("[%08x] sched_yield: env %08x is runnable\n", curenv ? curenv->env_id : 0, envs[i].env_id);
+			}
 			env_run(&envs[i]);
+		}
 	}
 
 	if (idle && idle->env_status == ENV_RUNNING)
+	{
+		if (debug)
+		{
+			cprintf("3\n");
+			cprintf("[%08x] sched_yield: env %08x is still running\n", curenv ? curenv->env_id : 0, idle->env_id);
+		}
 		env_run(idle);
+	}
 
 	// sched_halt never returns
 	sched_halt();

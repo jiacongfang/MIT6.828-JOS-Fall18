@@ -141,6 +141,7 @@ int spawn(const char *prog, const char **argv)
 	return child;
 
 error:
+	cprintf("destroying the environment in spawn()\n");
 	sys_env_destroy(child);
 	close(fd);
 	return r;
@@ -173,6 +174,7 @@ int spawnl(const char *prog, const char *arg0, ...)
 	for (i = 0; i < argc; i++)
 		argv[i + 1] = va_arg(vl, const char *);
 	va_end(vl);
+	// cprintf("#########spawnl %s\n", prog);
 	return spawn(prog, argv);
 }
 
