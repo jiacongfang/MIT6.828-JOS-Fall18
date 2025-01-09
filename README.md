@@ -1,3 +1,7 @@
+# PKU Operating System (Honor Track) - 2024 Fall
+
+This repository contains my lab implementations for the PKU Operating System (Honor Track) course, based on the [MIT 6.828 JOS (2018 Fall Version)](https://pdos.csail.mit.edu/6.828/2018/labguide.html).
+
 ### I. Challenge: Add more features to the shell
 实现了最后一个Challenge，主要在 `user/sh.c`中进行修改，具体如下：
 1. multiple commands per line  `ls; echo hi`：将原有的`runcmd`重命名为 `run_single_cmd`，用以执行单步命令（注意需要将最后的`exit()`去掉）。新定义`runcmd`通过识别`;`将命令划分，对每个命令创建一个子进程调用`run_single_cmd`以执行。
